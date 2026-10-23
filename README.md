@@ -1,3 +1,46 @@
+# Neuromobile fork: PHP 7.2 (sury) image
+
+> **This is a Neuromobile fork of [serversideup/docker-php](https://github.com/serversideup/docker-php).** Everything below the separator is the original upstream README.
+
+## Why this image exists
+Our production apps (e.g. `ca-migrations`) still run on **PHP 7.2**. PHP only ships security fixes for supported branches, and the official `php:7.2-*` Docker images have not been updated in years. The upstream variations in this repo build `FROM` those official images, so they can never receive new security patches for 7.2.
+
+[Ondřej Surý's repository (deb.sury.org)](https://deb.sury.org/) still backports security fixes to PHP 7.2 Debian packages. For example, `7.2.34-66` includes the fixes for **CVE-2026-109618** and **CVE-2026-109619** (backported from PHP 8.2.35).
+
+## What it is
+The [`fpm-nginx-sury`](src/variations/fpm-nginx-sury/Dockerfile) variation:
+
+- Starts from `debian:bookworm-slim` instead of the official PHP image.
+- Installs PHP 7.2 FPM/CLI and extensions from deb.sury.org, **pinned** to an exact package version (`PHP_SURY_VERSION` build arg).
+- Keeps the serversideup tooling we rely on: NGINX, S6 Overlay process supervision, entrypoint scripts, healthchecks and all the `PHP_*`/`NGINX_*` environment variables.
+- Mimics the official image layout (`/usr/local/etc/php/conf.d`, `/usr/local/etc/php-fpm.conf`, `/usr/local/etc/php-fpm.d/`, `/usr/local/sbin/php-fpm`), so the shared scripts under `src/` work unchanged.
+- Runs without a `php.ini` (PHP defaults + serversideup `.ini` files), same as the official images.
+- Includes the extensions our apps need (opcache, pdo_mysql, pdo_pgsql, redis, zip, intl, gd, pcntl in CLI only, ...). Add extra ones with `apt-get install php7.2-<ext>`; `install-php-extensions` and `docker-php-ext-*` are **not** available in this image.
+
+It is published as `neuromobile/docker-php7.2:7.2-fpm-nginx-sury-bookworm` (amd64 only).
+
+## How to build it
+Requires Docker with `buildx`. From the repository root:
+
+```bash
+./scripts/dev.sh --variation fpm-nginx-sury --version 7.2 --os bookworm --platform linux/amd64 --registry neuromobile/docker-php7.2
+```
+
+This produces `neuromobile/docker-php7.2:7.2-fpm-nginx-sury-bookworm`. Always pass `--platform linux/amd64`: on Apple Silicon `dev.sh` would otherwise build for arm64. Then push it:
+
+```bash
+docker push neuromobile/docker-php7.2:7.2-fpm-nginx-sury-bookworm
+```
+
+## How to pick up a new security patch
+1. Find the latest `php7.2` version for bookworm in the [sury package index](https://packages.sury.org/php/dists/bookworm/main/binary-amd64/Packages) and check its changelog for the CVE you care about.
+2. Update `PHP_SURY_VERSION` (and `PHP_REDIS_SURY_VERSION` if needed) in [`src/variations/fpm-nginx-sury/Dockerfile`](src/variations/fpm-nginx-sury/Dockerfile).
+3. Rebuild, test locally (`php -v`, `php -m`, `/healthcheck`), push, and redeploy the apps that use it.
+
+Sury removes old versions from its index, so rebuilding with an outdated pin will fail on purpose: bump the pin instead of unpinning.
+
+---
+
 <p align="center">
 		<a href="https://serversideup.net/open-source/docker-php/"><img src="https://raw.githubusercontent.com/serversideup/docker-php/main/.github/img/header.png" width="1280" alt="Docker Images Logo"></a>
 </p>
